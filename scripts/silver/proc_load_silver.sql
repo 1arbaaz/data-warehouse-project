@@ -1,9 +1,9 @@
 /*
 ===============================================================================
-PostgreSQL Function: Load Silver Layer (Bronze -> Silver)
+Stored Procedure: Load Silver Layer (Bronze -> Silver)
 ===============================================================================
 Script Purpose:
-    This function performs the ETL (Extract, Transform, Load) process to 
+    This procedure performs the ETL (Extract, Transform, Load) process to 
     populate the 'silver' schema tables from the 'bronze' schema.
     Actions Performed:
         - Truncates Silver tables.
@@ -11,15 +11,16 @@ Script Purpose:
         
 Parameters:
     None. 
-      This function does not accept any parameters or return any values.
+      This procedure does not accept any parameters or return any values.
 
 Usage Example:
-    SELECT silver.load_silver();
+    CALL silver.load_silver();
 ===============================================================================
 */
 
-CREATE OR REPLACE FUNCTION silver.load_silver()
-RETURNS void AS $$
+CREATE OR REPLACE PROCEDURE silver.load_silver()
+LANGUAGE plpgsql
+AS $$
 DECLARE
     start_time timestamp;
     end_time timestamp;
@@ -59,12 +60,12 @@ BEGIN
                 WHEN UPPER(TRIM(cst_marital_status)) = 'S' THEN 'Single'
                 WHEN UPPER(TRIM(cst_marital_status)) = 'M' THEN 'Married'
                 ELSE 'n/a'
-            END AS cst_marital_status, -- Normalize marital status values
+            END AS cst_marital_status,
             CASE 
                 WHEN UPPER(TRIM(cst_gndr)) = 'F' THEN 'Female'
                 WHEN UPPER(TRIM(cst_gndr)) = 'M' THEN 'Male'
                 ELSE 'n/a'
-            END AS cst_gndr, -- Normalize gender values
+            END AS cst_gndr,
             cst_create_date
         FROM (
             SELECT
@@ -73,7 +74,7 @@ BEGIN
             FROM bronze.crm_cust_info
             WHERE cst_id IS NOT NULL
         ) t
-        WHERE flag_last = 1; -- Select the most recent record per customer
+        WHERE flag_last = 1;
         end_time := clock_timestamp();
         RAISE NOTICE '>> Load Duration: % seconds', EXTRACT(EPOCH FROM (end_time - start_time));
         RAISE NOTICE '>> -------------';
@@ -95,8 +96,8 @@ BEGIN
         )
         SELECT
             prd_id,
-            REPLACE(SUBSTRING(prd_key, 1, 5), '-', '_') AS cat_id, -- Extract category ID
-            SUBSTRING(prd_key, 7) AS prd_key,      -- Extract product key
+            REPLACE(SUBSTRING(prd_key, 1, 5), '-', '_') AS cat_id,
+            SUBSTRING(prd_key, 7) AS prd_key,
             prd_nm,
             COALESCE(prd_cost, 0) AS prd_cost,
             CASE 
@@ -105,12 +106,12 @@ BEGIN
                 WHEN UPPER(TRIM(prd_line)) = 'S' THEN 'Other Sales'
                 WHEN UPPER(TRIM(prd_line)) = 'T' THEN 'Touring'
                 ELSE 'n/a'
-            END AS prd_line, -- Map product line codes
+            END AS prd_line,
             CAST(prd_start_dt AS DATE) AS prd_start_dt,
             CAST(
                 (LEAD(prd_start_dt) OVER (PARTITION BY prd_key ORDER BY prd_start_dt)) - INTERVAL '1 day'
                 AS DATE
-            ) AS prd_end_dt -- Calculate end date
+            ) AS prd_end_dt
         FROM bronze.crm_prd_info;
         end_time := clock_timestamp();
         RAISE NOTICE '>> Load Duration: % seconds', EXTRACT(EPOCH FROM (end_time - start_time));
@@ -136,7 +137,6 @@ BEGIN
             sls_ord_num,
             sls_prd_key,
             sls_cust_id,
-            -- Assuming date is stored as an integer YYYYMMDD
             CASE 
                 WHEN sls_order_dt = 0 OR LENGTH(sls_order_dt::text) != 8 THEN NULL
                 ELSE to_date(sls_order_dt::text, 'YYYYMMDD')
@@ -153,12 +153,12 @@ BEGIN
                 WHEN sls_sales IS NULL OR sls_sales <= 0 OR sls_sales != sls_quantity * ABS(sls_price) 
                     THEN sls_quantity * ABS(sls_price)
                 ELSE sls_sales
-            END AS sls_sales, -- Recalculate sales if missing or incorrect
+            END AS sls_sales,
             sls_quantity,
             CASE 
                 WHEN sls_price IS NULL OR sls_price <= 0 
                     THEN sls_sales / NULLIF(sls_quantity, 0)
-                ELSE sls_price  -- Derive price if invalid
+                ELSE sls_price
             END AS sls_price
         FROM bronze.crm_sales_details;
         end_time := clock_timestamp();
@@ -177,18 +177,18 @@ BEGIN
         )
         SELECT
             CASE
-                WHEN cid LIKE 'NAS%' THEN SUBSTRING(cid FROM 4) -- Remove 'NAS' prefix
+                WHEN cid LIKE 'NAS%' THEN SUBSTRING(cid FROM 4)
                 ELSE cid
             END AS cid, 
             CASE
-                WHEN bdate > current_date THEN NULL -- Set future birthdates to NULL
+                WHEN bdate > current_date THEN NULL
                 ELSE bdate
             END AS bdate,
             CASE
                 WHEN UPPER(TRIM(gen)) IN ('F', 'FEMALE') THEN 'Female'
                 WHEN UPPER(TRIM(gen)) IN ('M', 'MALE') THEN 'Male'
                 ELSE 'n/a'
-            END AS gen -- Normalize gender values
+            END AS gen
         FROM bronze.erp_cust_az12;
         end_time := clock_timestamp();
         RAISE NOTICE '>> Load Duration: % seconds', EXTRACT(EPOCH FROM (end_time - start_time));
@@ -214,7 +214,7 @@ BEGIN
                 WHEN TRIM(cntry) IN ('US', 'USA') THEN 'United States'
                 WHEN TRIM(cntry) = '' OR cntry IS NULL THEN 'n/a'
                 ELSE TRIM(cntry)
-            END AS cntry -- Normalize and handle missing country codes
+            END AS cntry
         FROM bronze.erp_loc_a101;
         end_time := clock_timestamp();
         RAISE NOTICE '>> Load Duration: % seconds', EXTRACT(EPOCH FROM (end_time - start_time));
@@ -255,4 +255,4 @@ BEGIN
         RAISE NOTICE '==========================================';
     END;
 END;
-$$ LANGUAGE plpgsql;
+$$;
