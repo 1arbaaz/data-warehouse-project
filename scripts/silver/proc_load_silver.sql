@@ -12,6 +12,17 @@ Script Purpose:
 Parameters:
     None. 
       This procedure does not accept any parameters or return any values.
+ALTER TABLE silver.crm_prd_info 
+ADD COLUMN cat_id TEXT;
+select * from bronze.crm_sales_details
+ALTER TABLE silver.crm_sales_details
+ALTER COLUMN sls_order_dt TYPE DATE USING TO_DATE(sls_order_dt::TEXT, 'YYYYMMDD');
+
+ALTER TABLE silver.crm_sales_details
+ALTER COLUMN sls_ship_dt TYPE DATE USING TO_DATE(sls_ship_dt::TEXT, 'YYYYMMDD');
+
+ALTER TABLE silver.crm_sales_details
+ALTER COLUMN sls_due_dt TYPE DATE USING TO_DATE(sls_due_dt::TEXT, 'YYYYMMDD');
 
 Usage Example:
     CALL silver.load_silver();
@@ -27,7 +38,7 @@ DECLARE
     batch_start_time timestamp;
     batch_end_time timestamp;
 BEGIN
-    BEGIN 
+    BEGIN
         batch_start_time := clock_timestamp();
         RAISE NOTICE '================================================';
         RAISE NOTICE 'Loading Silver Layer';
@@ -96,8 +107,8 @@ BEGIN
         )
         SELECT
             prd_id,
-            REPLACE(SUBSTRING(prd_key, 1, 5), '-', '_') AS cat_id,
-            SUBSTRING(prd_key, 7) AS prd_key,
+            REPLACE(SUBSTRING(prd_key FROM 1 FOR 5), '-', '_') AS cat_id,
+            SUBSTRING(prd_key FROM 7) AS prd_key,
             prd_nm,
             COALESCE(prd_cost, 0) AS prd_cost,
             CASE 
@@ -117,7 +128,7 @@ BEGIN
         RAISE NOTICE '>> Load Duration: % seconds', EXTRACT(EPOCH FROM (end_time - start_time));
         RAISE NOTICE '>> -------------';
 
-        -- Loading crm_sales_details
+        -- Loading silver.crm_sales_details
         start_time := clock_timestamp();
         RAISE NOTICE '>> Truncating Table: silver.crm_sales_details';
         TRUNCATE TABLE silver.crm_sales_details;
@@ -165,7 +176,7 @@ BEGIN
         RAISE NOTICE '>> Load Duration: % seconds', EXTRACT(EPOCH FROM (end_time - start_time));
         RAISE NOTICE '>> -------------';
 
-        -- Loading erp_cust_az12
+        -- Loading silver.erp_cust_az12
         start_time := clock_timestamp();
         RAISE NOTICE '>> Truncating Table: silver.erp_cust_az12';
         TRUNCATE TABLE silver.erp_cust_az12;
@@ -198,7 +209,7 @@ BEGIN
         RAISE NOTICE 'Loading ERP Tables';
         RAISE NOTICE '------------------------------------------------';
 
-        -- Loading erp_loc_a101
+        -- Loading silver.erp_loc_a101
         start_time := clock_timestamp();
         RAISE NOTICE '>> Truncating Table: silver.erp_loc_a101';
         TRUNCATE TABLE silver.erp_loc_a101;
@@ -220,7 +231,7 @@ BEGIN
         RAISE NOTICE '>> Load Duration: % seconds', EXTRACT(EPOCH FROM (end_time - start_time));
         RAISE NOTICE '>> -------------';
         
-        -- Loading erp_px_cat_g1v2
+        -- Loading silver.erp_px_cat_g1v2
         start_time := clock_timestamp();
         RAISE NOTICE '>> Truncating Table: silver.erp_px_cat_g1v2';
         TRUNCATE TABLE silver.erp_px_cat_g1v2;
@@ -246,7 +257,7 @@ BEGIN
         RAISE NOTICE 'Loading Silver Layer is Completed';
         RAISE NOTICE '    - Total Load Duration: % seconds', EXTRACT(EPOCH FROM (batch_end_time - batch_start_time));
         RAISE NOTICE '==========================================';
-        
+
     EXCEPTION WHEN OTHERS THEN
         RAISE NOTICE '==========================================';
         RAISE NOTICE 'ERROR OCCURRED DURING LOADING SILVER LAYER';
